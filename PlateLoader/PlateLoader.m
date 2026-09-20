@@ -22,9 +22,8 @@ classdef PlateLoader < hgsetget
             % Construct a PlateLoader Object
             portStr = sprintf('COM%d',portNumber);
 
-%            portStr = '/dev/cu.usbserial-110'; % ignore the portNumber for my Mac
-
-            obj.serialRobot = serialport(portStr, 19200, 'Timeout', 15);
+            fprintf("Connecting to robot %s...", portStr)
+            obj.serialRobot = serialport(portStr, 19200, "Timeout", 5);
             writeline(obj.serialRobot,'INITIALIZE');
             response = readline(obj.serialRobot);
             % Had to print the response since a construct cannot return mulitple items
@@ -37,6 +36,7 @@ classdef PlateLoader < hgsetget
             %   Maybe use the GRIPPER_STATUS command and ready string reply
             obj.isPlatePresent = false;
         end
+
         function response = reset(obj)
             % Reset robot
             writeline(obj.serialRobot,'RESET');
@@ -45,6 +45,7 @@ classdef PlateLoader < hgsetget
             obj.isGripperClosed = true;
             response = readline(obj.serialRobot);
         end
+
         function response = x(obj,pos)
             % Moves the x-axis to position, passes the reply back to caller
             if (pos <1 || pos>5)
@@ -59,6 +60,7 @@ classdef PlateLoader < hgsetget
             obj.xAxisPosition = pos;
             response = readline(obj.serialRobot);
         end
+
         function response = extend(obj)
             % Extends the Z-Axis, passes the reply back to caller
             writeline(obj.serialRobot,'Z-AXIS EXTEND');
@@ -70,12 +72,14 @@ classdef PlateLoader < hgsetget
                 obj.isZAxisExtended = true;
             end
         end
+
         function response = retract(obj)
             % Retracts the Z-Axis, passes the reply back to caller
             writeline(obj.serialRobot,'Z-AXIS RETRACT');
             obj.isZAxisExtended = false;
             response = readline(obj.serialRobot);
         end
+
         function response = close(obj)
             % Close Gripper, passes the reply back to caller
             writeline(obj.serialRobot,'GRIPPER CLOSE');
@@ -161,12 +165,55 @@ classdef PlateLoader < hgsetget
             grip = obj.isGripperClosed;
             plate = obj.isPlatePresent;
         end
+
+        function response = dance(obj)
+            obj.reset()
+            pause(3)
+            obj.x(1)
+            pause(3)
+            obj.open()
+            pause(1.5)
+            obj.extend()
+            pause(1.5)
+            obj.close()
+            pause(1.5)
+            obj.open()
+            pause(1.5)
+            obj.close()
+            pause(1.5)
+            obj.retract()
+            pause(1.5)
+            obj.x(5)
+            pause(3)
+            obj.x(1)
+            pause(3)
+            obj.extend()
+            pause(1.5)
+            obj.close()
+            pause(1.5)
+            obj.open()
+            pause(1.5)
+            obj.close()
+            pause(1.5)
+            obj.retract()
+            pause(1.5)
+            obj.x(3)
+            pause(3)
+            obj.open()
+
+            obj.xAxisPosition = 3;
+            obj.isZAxisExtended = false;
+            obj.isGripperClosed = true;
+            obj.isPlatePresent = false;
+        end
+
         function response = shutdown(obj)
             % Close serial object
             delete(obj.serialRobot);
             obj.serialRobot = [];
             response = 'Disconnected';
         end
+
         function disp(obj)
             % Overrides the display when seeing robot status
             % Note: if you need to see the field names use
