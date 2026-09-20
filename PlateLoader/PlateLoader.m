@@ -122,6 +122,7 @@ classdef PlateLoader < hgsetget
                 obj.isPlatePresent = false;
             end
         end
+        
         function response = setTimeValues(obj,timeDelays)
             % setTimeValues(timeDelays) - Passes a matrix with 5 rows (froms)
             % and 5 columns (tos) to set all the time delay value
@@ -140,10 +141,12 @@ classdef PlateLoader < hgsetget
                 end
             end
         end
+
         function response = resetDefaultTimes(obj)
             % Resets the default time delay table values
             response = obj.setTimeValues(obj.defaultTimeTable);
         end
+
         function response = getStatus(obj)
             % Since we are keeping the status as instance fields we can just
             % get the properties of the class, this is a useful double check
