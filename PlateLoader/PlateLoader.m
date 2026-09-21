@@ -23,7 +23,7 @@ classdef PlateLoader < hgsetget
             portStr = sprintf('COM%d',portNumber);
 
             fprintf("Connecting to robot %s...", portStr)
-            obj.serialRobot = serialport(portStr, 19200, "Timeout", 5);
+            obj.serialRobot = serialport(portStr, 19200, "Timeout", 15);
             writeline(obj.serialRobot,'INITIALIZE');
             response = readline(obj.serialRobot);
             % Had to print the response since a construct cannot return mulitple items
@@ -91,6 +91,7 @@ classdef PlateLoader < hgsetget
                 obj.isPlatePresent = true;
             end
         end
+
         function response = open(obj)
             % Open Gripper, passes the reply back to caller
             writeline(obj.serialRobot,'GRIPPER OPEN');
@@ -98,6 +99,7 @@ classdef PlateLoader < hgsetget
             obj.isPlatePresent = false;
             response = readline(obj.serialRobot);
         end
+        
         function response = movePlate(obj, startPos, endPos)
             % movePlate(startPos, endPos)- Passes two MATLAB numbers for the
             % start and end position of the plate, tries to move the plate to
