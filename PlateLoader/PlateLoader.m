@@ -85,7 +85,7 @@ classdef PlateLoader < hgsetget
             writeline(obj.serialRobot,'GRIPPER CLOSE');
             obj.isGripperClosed = true;
             response = readline(obj.serialRobot);
-            if endsWith(response, "NOPLATE")
+            if contains(response, "NOPLATE")
                 obj.isPlatePresent = false;
             else
                 obj.isPlatePresent = true;
