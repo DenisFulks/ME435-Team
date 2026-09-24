@@ -3,7 +3,7 @@ import time
 
 import PlateLoader
 
-plateLoader = PlateLoader.PlateLoader("/dev/ttyACM0")
+plateLoader = PlateLoader.PlateLoader("/dev/ttyUSB0")
 plateLoader.connect()
 
 while True:
@@ -13,7 +13,8 @@ while True:
     print("3 - GRIPPER")
     print("4 - Z-AXIS")
     print("5 - MOVE")
-    print("6 - EXIT")
+    print("6 - STATUS")
+    print("7 - EXIT")
     choice = input("Please Select a Command: ")
 
     if (choice == "1"):
@@ -66,6 +67,10 @@ while True:
         print(response)
     
     elif (choice == "6"):
+        response = plateLoader.send_command("LOADER_STATUS")
+        print(response)
+
+    elif (choice == "7"):
         plateLoader.disconnect()
         break
 
