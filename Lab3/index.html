@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plate Loader Control</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 20px auto; padding: 0 16px; background: #f4f4f4; color: #222; }
+  h1 { font-size: 1.5em; }
+  fieldset { background: #fff; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 14px; }
+  legend { font-weight: bold; }
+  button { padding: 8px 14px; margin: 4px; font-size: 1em; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  select, input { font-size: 1em; padding: 4px; margin: 4px; }
+  #status { font-family: monospace; font-size: 1.1em; }
+  #log { font-family: monospace; font-size: 0.9em; height: 200px; overflow-y: auto; background: #111; color: #0f0; padding: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>Plate Loader Control</h1>
+
+<fieldset>
+  <legend>Robot State</legend>
+  <div id="status">X-AXIS 3, RETRACTED, CLOSED, NOPLATE</div>
+  <div>Last response: <span id="lastResponse">—</span></div>
+</fieldset>
+
+<fieldset>
+  <legend>General</legend>
+  <button onclick="initialize()">Initialize</button>
+  <button onclick="reset()">Reset</button>
+  <button onclick="getStatus()">Loader Status</button>
+</fieldset>
+
+<fieldset>
+  <legend>X-Axis</legend>
+  <button onclick="moveX(1)">1</button>
+  <button onclick="moveX(2)">2</button>
+  <button onclick="moveX(3)">3</button>
+  <button onclick="moveX(4)">4</button>
+  <button onclick="moveX(5)">5</button>
+</fieldset>
+
+<fieldset>
+  <legend>Z-Axis</legend>
+  <button onclick="extend()">Extend</button>
+  <button onclick="retract()">Retract</button>
+</fieldset>
+
+<fieldset>
+  <legend>Gripper</legend>
+  <button onclick="openGripper()">Open</button>
+  <button onclick="closeGripper()">Close</button>
+</fieldset>
+
+<fieldset>
+  <legend>Move Plate</legend>
+  From <select id="moveFrom"></select>
+  To <select id="moveTo"></select>
+  <button onclick="movePlate()">Move</button>
+</fieldset>
+
+<fieldset>
+  <legend>Time Delays</legend>
+  From <select id="delayFrom"></select>
+  To <select id="delayTo"></select>
+  Delay <input id="delayValue" type="number" min="0" value="30" style="width:70px">
+  <button onclick="setDelay()">Set Delay</button>
+  <br>
+  <button onclick="resetDefaultTimes()">Reset Default Delays</button>
+</fieldset>
+
+<fieldset>
+  <legend>Extras</legend>
+  <button onclick="dance()">Dance</button>
+</fieldset>
+
+<fieldset>
+  <legend>Log</legend>
+  <div id="log"></div>
+</fieldset>
+
+<script>
+  // ---- Robot state (mirrors the properties in PlateLoader.m) ----
+  const state = { xAxisPosition: 3, isZAxisExtended: false, isGripperClosed: true, isPlatePresent: false };
+
+  const defaultTimeTable = [
+    [0, 60, 20, 30, 0],
+    [0,  0, 30, 30, 0],
+    [0, 30,  0, 30, 0],
+    [0, 30, 30,  0, 0],
+    [0, 30, 20, 60, 0]
+  ];
+
+  // Fill the 1-5 dropdowns
+  for (const id of ["moveFrom", "moveTo", "delayFrom", "delayTo"]) {
+    const sel = document.getElementById(id);
+    for (let i = 1; i <= 5; i++) sel.add(new Option(i, i));
+  }
+
+  // ---- Helpers ----
+  function log(msg) {
+    const el = document.getElementById("log");
+    el.textContent += new Date().toLocaleTimeString() + "  " + msg + "\n";
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setBusy(busy) {
+    document.querySelectorAll("button").forEach(b => b.disabled = busy);
+  }
+
+  function updateStatus() {
+    let s = "X-AXIS " + state.xAxisPosition + ", ";
+    s += state.isZAxisExtended ? "EXTENDED, " : "RETRACTED, ";
+    if (state.isGripperClosed) s += state.isPlatePresent ? "CLOSED, PLATE" : "CLOSED, NOPLATE";
+    else s += "OPEN";
+    document.getElementById("status").textContent = s;
+  }
+
+  // Sends one command to the Flask server (GET /api/<command>) and returns the reply text
+  async function sendCommand(command) {
+    log("> " + command);
+    try {
+      const res = await fetch("/api/" + encodeURIComponent(command));
+      const text = (await res.text()).trim();
+      log("< " + text);
+      document.getElementById("lastResponse").textContent = text;
+      return text;
+    } catch (err) {
+      log("! Error: " + err);
+      return "ERROR " + err;
+    }
+  }
+
+  // Wraps a button action so buttons are disabled while the robot is working
+  async function run(action) {
+    setBusy(true);
+    try { await action(); } finally { setBusy(false); updateStatus(); }
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ---- Raw robot actions (same logic as PlateLoader.m) ----
+  async function _reset() {
+    state.xAxisPosition = 3; state.isZAxisExtended = false; state.isGripperClosed = true;
+    return sendCommand("RESET");
+  }
+  async function _x(pos) {
+    if (state.xAxisPosition !== pos) state.isZAxisExtended = false;
+    state.xAxisPosition = pos;
+    return sendCommand("X-AXIS " + pos);
+  }
+  async function _extend() {
+    const r = await sendCommand("Z-AXIS EXTEND");
+    state.isZAxisExtended = !r.startsWith("ERROR");
+    return r;
+  }
+  async function _retract() {
+    state.isZAxisExtended = false;
+    return sendCommand("Z-AXIS RETRACT");
+  }
+  async function _close() {
+    state.isGripperClosed = true;
+    const r = await sendCommand("GRIPPER CLOSE");
+    state.isPlatePresent = !r.includes("NOPLATE");
+    return r;
+  }
+  async function _open() {
+    state.isGripperClosed = false; state.isPlatePresent = false;
+    return sendCommand("GRIPPER OPEN");
+  }
+
+  // ---- Button handlers ----
+  function initialize() {
+    run(async () => {
+      await sendCommand("INITIALIZE");
+      state.xAxisPosition = 3; state.isZAxisExtended = false; state.isGripperClosed = true; state.isPlatePresent = false;
+    });
+  }
+  function reset()        { run(_reset); }
+  function getStatus()    { run(() => sendCommand("LOADER_STATUS")); }
+  function moveX(pos)     { run(() => _x(pos)); }
+  function extend()       { run(_extend); }
+  function retract()      { run(_retract); }
+  function openGripper()  { run(_open); }
+  function closeGripper() { run(_close); }
+
+  function movePlate() {
+    const from = parseInt(document.getElementById("moveFrom").value);
+    const to = parseInt(document.getElementById("moveTo").value);
+    run(async () => {
+      const r = await sendCommand("MOVE " + from + " " + to);
+      if (r.startsWith("ERROR")) {
+        Object.assign(state, { xAxisPosition: from, isZAxisExtended: false, isGripperClosed: false, isPlatePresent: false });
+      } else {
+        Object.assign(state, { xAxisPosition: 3, isZAxisExtended: false, isGripperClosed: true, isPlatePresent: false });
+      }
+    });
+  }
+
+  function setDelay() {
+    const from = document.getElementById("delayFrom").value;
+    const to = document.getElementById("delayTo").value;
+    const delay = document.getElementById("delayValue").value;
+    run(() => sendCommand("SET_DELAY " + from + " " + to + " " + delay));
+  }
+
+  function resetDefaultTimes() {
+    run(async () => {
+      // Same loop as setTimeValues in PlateLoader.m (rows 1-5, columns 2-4, skip i == j)
+      for (let i = 1; i <= 5; i++) {
+        for (let j = 2; j <= 4; j++) {
+          if (i !== j) await sendCommand("SET_DELAY " + i + " " + j + " " + defaultTimeTable[i - 1][j - 1]);
+        }
+      }
+    });
+  }
+
+  function dance() {
+    run(async () => {
+      await _reset();   await sleep(3000);
+      await _x(1);      await sleep(3000);
+      await _open();    await sleep(1500);
+      await _extend();  await sleep(1500);
+      await _close();   await sleep(1500);
+      await _open();    await sleep(1500);
+      await _close();   await sleep(1500);
+      await _retract(); await sleep(1500);
+      await _x(5);      await sleep(3000);
+      await _x(1);      await sleep(3000);
+      await _extend();  await sleep(1500);
+      await _close();   await sleep(1500);
+      await _open();    await sleep(1500);
+      await _close();   await sleep(1500);
+      await _retract(); await sleep(1500);
+      await _x(3);      await sleep(3000);
+      await _open();
+      Object.assign(state, { xAxisPosition: 3, isZAxisExtended: false, isGripperClosed: true, isPlatePresent: false });
+    });
+  }
+
+  updateStatus();
+</script>
+</body>
+</html>
